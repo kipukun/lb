@@ -27,7 +27,7 @@ Stream Genre: various</annotation>
 		return
 	}
 	if listeners != 1337 {
-		t.Errorf("parsexml was incorrect, got: %d, want: %d, %w", listeners, 1337, err)
+		t.Errorf("parsexml was incorrect, got: %d, want: %d", listeners, 1337)
 		return
 	}
 }
