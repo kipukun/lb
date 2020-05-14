@@ -44,8 +44,11 @@ func (s *state) check() {
 		if relay.Disabled {
 			continue
 		}
+		client := &http.Client{
+			Timeout: 10 * time.Second,
+		}
 
-		resp, err := http.Get(relay.Status)
+		resp, err := client.Get(relay.Status)
 		if err != nil {
 			relay.deactivate(err)
 			continue
