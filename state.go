@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,7 +22,7 @@ type state struct {
 	c         config
 	listeners int
 	min       float64
-	current   string
+	current   atomic.Value
 }
 
 func health(c *http.Client, relay *relay, wg *sync.WaitGroup) {
@@ -55,16 +56,17 @@ func (s *state) choose() {
 		score := float64((relay.Listeners / relay.Max) - (relay.Weight / 1000))
 		if score < s.min {
 			s.min = score
-			s.current = relay.Stream
+			s.current.Store(relay.Stream)
 			return
 		}
 	}
-	s.current = s.c.Fallback
+	s.current.Store(s.c.Fallback)
+	return
 }
 
 func (s *state) check() {
 	client := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 3 * time.Second,
 	}
 	var wg sync.WaitGroup
 	for _, relay := range s.c.Relays {
@@ -99,19 +101,20 @@ func (s *state) getIndex() http.HandlerFunc {
 
 func (s *state) getMain() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, s.current, http.StatusFound)
+		http.Redirect(w, r, s.current.Load().(string), http.StatusFound)
 		return
 	}
 }
 
 func (s *state) start() {
+	s.current.Store(s.c.Fallback)
 	s.serv = &http.Server{
 		Addr:         "127.0.0.1:8080",
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
 	}
 	http.HandleFunc("/", s.getIndex())
-	http.HandleFunc("/status", s.getStatus())
+	// http.HandleFunc("/status", s.getStatus())
 	http.HandleFunc("/main", s.getMain())
 
 	c := make(chan os.Signal)
