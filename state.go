@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 )
 
@@ -21,6 +22,28 @@ type state struct {
 	listeners int
 	min       float64
 	current   string
+}
+
+func health(c *http.Client, relay *relay, wg *sync.WaitGroup) {
+	defer wg.Done()
+	resp, err := c.Get(relay.Status)
+	if err != nil {
+		relay.deactivate(err)
+		return
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		relay.deactivate(err)
+		return
+	}
+	l, err := parsexml(body)
+	if err != nil {
+		relay.deactivate(err)
+		return
+	}
+	relay.activate(l)
+	return
 }
 
 func (s *state) choose() {
@@ -40,32 +63,19 @@ func (s *state) choose() {
 }
 
 func (s *state) check() {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	var wg sync.WaitGroup
 	for _, relay := range s.c.Relays {
 		if relay.Disabled {
 			continue
 		}
-		client := &http.Client{
-			Timeout: 10 * time.Second,
-		}
-
-		resp, err := client.Get(relay.Status)
-		if err != nil {
-			relay.deactivate(err)
-			continue
-		}
-		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			relay.deactivate(err)
-			continue
-		}
-		l, err := parsexml(body)
-		if err != nil {
-			relay.deactivate(err)
-			continue
-		}
-		relay.activate(l)
+		wg.Add(1)
+		go health(client, relay, &wg)
 	}
+	wg.Wait()
+	return
 }
 
 func (s *state) getStatus() http.HandlerFunc {
@@ -110,7 +120,7 @@ func (s *state) start() {
 	go func() {
 		for {
 			select {
-			case <-time.After(3 * time.Second):
+			case <-time.After(10 * time.Second):
 				s.check()
 				s.choose()
 			case <-c:
