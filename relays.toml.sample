@@ -1,13 +1,12 @@
-[relays]
-    [relays.main]
-    stream = "https://relay0.r-a-d.io/main.mp3"
-    status = "https://relay0.r-a-d.io/main.mp3.xspf"
-    max = 1000
-    weight = 100
+[main]
+stream = "https://relay0.r-a-d.io/main.mp3"
+status = "https://relay0.r-a-d.io/main.mp3.xspf"
+max = 1000
+weight = 100
 
-    [relays.secondary]
-    stream = "https://relay1.r-a-d.io/a.mp3"
-    status = "https://relay1.r-a-d.io/a.mp3.xspf"
-    noredir = true
-    max = 800
-    weight = 120
+[secondary]
+stream = "https://relay1.r-a-d.io/a.mp3"
+status = "https://relay1.r-a-d.io/a.mp3.xspf"
+noredir = true
+max = 800
+weight = 120
