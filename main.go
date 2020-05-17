@@ -11,5 +11,8 @@ func main() {
 	if _, err := toml.DecodeFile("config.toml", &s.c); err != nil {
 		log.Fatal(err)
 	}
+	if _, err := toml.DecodeFile("relays.toml", &s.relays.m); err != nil {
+		log.Fatal(err)
+	}
 	s.start()
 }

@@ -14,7 +14,6 @@ import (
 
 type config struct {
 	Addr, Fallback string
-	Relays         map[string]*relay
 }
 
 type state struct {
@@ -23,11 +22,12 @@ type state struct {
 	listeners int
 	min       float64
 	current   atomic.Value
+	relays    relays
 }
 
 func health(c *http.Client, relay *relay, wg *sync.WaitGroup) {
 	defer wg.Done()
-	resp, err := c.Get(relay.Status)
+	resp, err := c.Get(relay.status())
 	if err != nil {
 		relay.deactivate(err)
 		return
@@ -48,7 +48,9 @@ func health(c *http.Client, relay *relay, wg *sync.WaitGroup) {
 }
 
 func (s *state) choose() {
-	for _, relay := range s.c.Relays {
+	s.relays.Lock()
+	defer s.relays.Unlock()
+	for _, relay := range s.relays.m {
 		if !relay.Online || relay.Noredir || relay.Disabled {
 			continue
 		}
@@ -69,7 +71,9 @@ func (s *state) check() {
 		Timeout: 3 * time.Second,
 	}
 	var wg sync.WaitGroup
-	for _, relay := range s.c.Relays {
+	s.relays.Lock()
+	defer s.relays.Unlock()
+	for _, relay := range s.relays.m {
 		if relay.Disabled {
 			continue
 		}
@@ -82,9 +86,11 @@ func (s *state) check() {
 
 func (s *state) getStatus() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		b, err := json.Marshal(s.c.Relays)
+		s.relays.Lock()
+		defer s.relays.Unlock()
+		b, err := json.Marshal(s.relays.m)
 		if err != nil {
-			http.Error(w, "could not marshal relay map", http.StatusInternalServerError)
+			http.Error(w, "error marshalling relay map", http.StatusTeapot)
 			return
 		}
 		fmt.Fprintln(w, string(b))
@@ -109,12 +115,12 @@ func (s *state) getMain() http.HandlerFunc {
 func (s *state) start() {
 	s.current.Store(s.c.Fallback)
 	s.serv = &http.Server{
-		Addr:         "127.0.0.1:8080",
+		Addr:         s.c.Addr,
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
 	}
 	http.HandleFunc("/", s.getIndex())
-	// http.HandleFunc("/status", s.getStatus())
+	http.HandleFunc("/status", s.getStatus())
 	http.HandleFunc("/main", s.getMain())
 
 	c := make(chan os.Signal)
@@ -134,6 +140,6 @@ func (s *state) start() {
 	}()
 	err := s.serv.ListenAndServe()
 	if err != http.ErrServerClosed {
-		fmt.Println("could not close gracefully")
+		fmt.Println("could not close gracefully", err)
 	}
 }
