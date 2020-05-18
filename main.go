@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/BurntSushi/toml"
@@ -15,6 +14,5 @@ func main() {
 	if _, err := toml.DecodeFile("relays.toml", &s.relays.m); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("slightly")
 	s.start()
 }
