@@ -42,7 +42,7 @@ func TestStateHealth(t *testing.T) {
 		{"timeout", func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(4 * time.Second) // the http.Client timeout should be 3 seconds
 		}, false},
-		{"almosttimeout", func(w http.ResponseWriter, r *http.Request) {
+		{"almost", func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(2 * time.Second)
 			fmt.Fprintln(w, string(x))
 		}, true},
@@ -50,11 +50,12 @@ func TestStateHealth(t *testing.T) {
 
 	for _, tt := range relaytests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt := tt
+			t.Parallel()
 			ts := httptest.NewServer(tt.relay)
+			defer ts.Close()
 			s, r, m := new(state), new(relay), make(map[string]*relay)
-			r.Status = ts.URL
-			m[tt.name] = r
-			s.relays.m = m
+			r.Status, m[tt.name], s.relays.m = ts.URL, r, m
 			s.check()
 			o := s.relays.m[tt.name].Online
 			if o != tt.online {
