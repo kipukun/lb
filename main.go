@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -15,6 +14,5 @@ func main() {
 	if _, err := toml.DecodeFile("relays.toml", &s.relays.m); err != nil {
 		log.Fatal(err)
 	}
-	s.mtime = time.Now()
 	s.start()
 }
