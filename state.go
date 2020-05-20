@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -11,10 +12,13 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/BurntSushi/toml"
 )
 
 type config struct {
 	Addr, Fallback string
+	Reload         bool
 }
 
 type state struct {
@@ -24,6 +28,7 @@ type state struct {
 	min       float64
 	current   atomic.Value
 	relays    relays
+	mtime     time.Time
 }
 
 func health(c *http.Client, relay *relay, wg *sync.WaitGroup) {
@@ -46,6 +51,13 @@ func health(c *http.Client, relay *relay, wg *sync.WaitGroup) {
 	}
 	relay.activate(l)
 	return
+}
+
+func (s *state) reload() {
+	if _, err := toml.DecodeFile("relays.toml", &s.relays.m); err != nil {
+		log.Println("reload: error decoding relay config file", err)
+		return
+	}
 }
 
 func (s *state) choose() {
@@ -131,6 +143,17 @@ func (s *state) start() {
 		for {
 			select {
 			case <-time.After(10 * time.Second):
+				if s.c.Reload {
+					f, err := os.Stat("relays.toml")
+					if err != nil {
+						fmt.Println("error reloading from config file, disabling hot reload")
+						s.c.Reload = false
+					}
+					if f.ModTime().After(s.mtime) {
+						s.reload()
+					}
+				}
+
 				s.check()
 				s.choose()
 			case <-c:
