@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	s := new(state)
+	s := newState()
 	if _, err := toml.DecodeFile("config.toml", &s.c); err != nil {
 		log.Fatal(err)
 	}
