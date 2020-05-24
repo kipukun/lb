@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/rivo/tview"
+
 	"github.com/BurntSushi/toml"
 )
 
@@ -23,11 +25,27 @@ type config struct {
 type state struct {
 	serv      *http.Server
 	c         config
+	ui        *tview.Application
 	listeners int
 	min       float64
 	current   atomic.Value
 	relays    relays
 	mtime     time.Time
+}
+
+func newState() *state {
+	s := new(state)
+	s.mtime = time.Now()
+	s.current.Store(s.c.Fallback)
+	s.serv = &http.Server{
+		Addr:         s.c.Addr,
+		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  15 * time.Second,
+	}
+	http.HandleFunc("/", s.getIndex())
+	http.HandleFunc("/status", s.getStatus())
+	http.HandleFunc("/main", s.getMain())
+	return s
 }
 
 func health(c *http.Client, relay *relay, wg *sync.WaitGroup) {
@@ -53,6 +71,14 @@ func health(c *http.Client, relay *relay, wg *sync.WaitGroup) {
 }
 
 func (s *state) reload() {
+	f, err := os.Stat("relays.toml")
+	if err != nil {
+		fmt.Println("reload: error reloading from config file, disabling hot reload")
+		s.c.Reload = false
+	}
+	if !f.ModTime().After(s.mtime) {
+		return
+	}
 	if _, err := toml.DecodeFile("relays.toml", &s.relays.m); err != nil {
 		log.Println("reload: error decoding relay config file", err)
 		return
@@ -97,17 +123,6 @@ func (s *state) check() {
 }
 
 func (s *state) start() {
-	s.mtime = time.Now()
-	s.current.Store(s.c.Fallback)
-	s.serv = &http.Server{
-		Addr:         s.c.Addr,
-		WriteTimeout: 15 * time.Second,
-		ReadTimeout:  15 * time.Second,
-	}
-	http.HandleFunc("/", s.getIndex())
-	http.HandleFunc("/status", s.getStatus())
-	http.HandleFunc("/main", s.getMain())
-
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt)
 
@@ -116,16 +131,8 @@ func (s *state) start() {
 			select {
 			case <-time.After(10 * time.Second):
 				if s.c.Reload {
-					f, err := os.Stat("relays.toml")
-					if err != nil {
-						fmt.Println("error reloading from config file, disabling hot reload")
-						s.c.Reload = false
-					}
-					if f.ModTime().After(s.mtime) {
-						s.reload()
-					}
+					s.reload()
 				}
-
 				s.check()
 				s.choose()
 			case <-c:
